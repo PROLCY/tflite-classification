@@ -283,6 +283,8 @@ class CameraFragment : Fragment(), ImageClassifierHelper.ClassifierListener {
                                 Bitmap.Config.ARGB_8888
                             )
                         }
+
+                        // 1초마다 추론
                         runBlocking {
                             delay(1000)
                             classifyImage(image)

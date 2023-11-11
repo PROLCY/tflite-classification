@@ -93,12 +93,8 @@ class ImageClassifierHelper(
 
         val modelName =
             when (currentModel) {
-                MODEL_MOBILENETV1 -> "mobilenetv1.tflite"
-                MODEL_EFFICIENTNETV0 -> "efficientnet-lite0.tflite"
-                MODEL_EFFICIENTNETV1 -> "efficientnet-lite1.tflite"
-                MODEL_EFFICIENTNETV2 -> "efficientnet-lite2.tflite"
                 CUSTOM_MODEL -> "model.tflite"
-                else -> "mobilenetv1.tflite"
+                else -> "model.tflite"
             }
 
         try {
@@ -117,29 +113,10 @@ class ImageClassifierHelper(
             setupImageClassifier()
         }
 
-        // Inference time is the difference between the system time at the start and finish of the
-        // process
-        var inferenceTime = SystemClock.uptimeMillis()
+        lateinit var inputImage: TensorImage
+        lateinit var outputBuffer: TensorBuffer
 
-        // Create preprocessor for the image.
-        // See https://www.tensorflow.org/lite/inference_with_metadata/
-        //            lite_support#imageprocessor_architecture
-        val imageProcessor =
-            ImageProcessor.Builder()
-                .build()
-
-        // Preprocess the image and convert it into a TensorImage for classification.
-        val tensorImage = imageProcessor.process(TensorImage.fromBitmap(image))
-
-        val imageProcessingOptions = ImageProcessingOptions.builder()
-            .setOrientation(getOrientationFromRotation(rotation))
-            .build()
-
-        val results = imageClassifier?.classify(tensorImage, imageProcessingOptions)
-        inferenceTime = SystemClock.uptimeMillis() - inferenceTime
-
-
-
+        // model 가져오기
         fun copyAssetToFile(context: Context, assetFileName: String): File {
             val outputFile = File(context.filesDir, assetFileName)
 
@@ -154,9 +131,8 @@ class ImageClassifierHelper(
             }
             return outputFile
         }
-        lateinit var inputImage: TensorImage
-        lateinit var outputBuffer: TensorBuffer
 
+        // image를 AI에 넣을 수 있게 변형
         fun loadImage(bitmap: Bitmap?): TensorImage{
             // TensorImage에 이미지 데이터 저장
             inputImage.load(bitmap)
@@ -172,23 +148,25 @@ class ImageClassifierHelper(
             return imageProcessor.process(inputImage)
         }
 
+        // 모델 생성
         val interpreter :Interpreter = Interpreter(copyAssetToFile(context, "model2.tflite"))
+
+        // 인풋 이미지 전처리
         val inputTensor = interpreter.getInputTensor(0)
         inputImage = TensorImage(inputTensor.dataType())
+        val tensorInputImage : TensorImage = loadImage(image)
+
+        // 아웃풋 할당
         val outputTensor = interpreter.getOutputTensor(0)
         outputBuffer = TensorBuffer.createFixedSize(outputTensor.shape(), outputTensor.dataType())
-        val tensorInputImage : TensorImage = loadImage(image)
+
+        // 모델 추론
         interpreter?.run(tensorInputImage.buffer, outputBuffer.buffer.rewind())
 
-        /*
-        println("Start")
-        println(outputBuffer.floatArray[0].div(1))
-        println(outputBuffer.floatArray[1].div(1))
-        println(outputBuffer.floatArray[2].div(1))
-        println("End")
-         */
+        // 최종 인덱스(0: 비상구, 1: 소화기, 3: 소화전)
+        val predicted_index : Int = outputBuffer.floatArray.indices.maxByOrNull { outputBuffer.floatArray[it] } ?: -1
 
-        println(outputBuffer.floatArray.indices.maxByOrNull { outputBuffer.floatArray[it] } ?: -1)
+        println(predicted_index)
 
     }
 
